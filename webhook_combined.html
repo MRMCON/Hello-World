@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Webhook Handler</title>
+    <style>
+        /* WordPress compatible styling */
+        .webhook-container {
+            padding: 20px;
+            max-width: 100%;
+        }
+
+        .webhook-status {
+            margin: 10px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-left: 4px solid #ccc;
+        }
+
+        .webhook-response {
+            font-family: monospace;
+            background: #f5f5f5;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            word-wrap: break-word;
+            line-height: 1.5;
+        }
+
+        .webhook-response ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+
+        .webhook-response li {
+            margin: 5px 0;
+        }
+
+        .webhook-response strong {
+            color: #2c3e50;
+        }
+
+        .webhook-response br {
+            line-height: 2;
+        }
+
+        .webhook-textarea {
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        /* Add to existing styles */
+        .webhook-loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .webhook-status.success {
+            background: #e7f3e8;
+            border-left-color: #2ecc71;
+        }
+
+        .webhook-status.error {
+            background: #fde7e7;
+            border-left-color: #e74c3c;
+        }
+
+        .webhook-counter {
+            color: #666;
+            font-size: 0.9em;
+            margin-top: 5px;
+            text-align: right;
+        }
+
+        .history-entry {
+            background: #fff;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            border: 1px solid #e0e0e0;
+            transition: all 0.3s ease;
+        }
+
+        .history-entry .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            padding: 10px;
+        }
+
+        .history-entry .history-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+
+        .history-entry.expanded .history-content {
+            max-height: 1000px;
+            transition: max-height 0.5s ease-in;
+        }
+
+        .history-entry .toggle-icon {
+            font-family: monospace;
+            transition: transform 0.3s ease;
+        }
+
+        .history-entry.expanded .toggle-icon {
+            transform: rotate(90deg);
+        }
+
+        .elementor-button {
+            background-color: #3498db;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .elementor-button:hover {
+            background-color: #2980b9;
+        }
+
+        /* Add to existing styles section */
+        .voice-controls {
+            display: flex;
+            gap: 10px;
+            margin: 10px 0;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .recording {
+            background-color: #e74c3c !important;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .speech-output {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        /* Update voice settings styles */
+        .voice-settings {
+            margin: 10px 0;
+            padding: 0;
+            background: #f8f9fa;
+            border-radius: 4px;
+            max-height: 0;
+            overflow: hidden;
+            opacity: 0;
+            transition: all 0.3s ease-out;
+        }
+
+        .voice-settings.expanded {
+            max-height: 500px;
+            opacity: 1;
+            padding: 15px;
+            transition: all 0.3s ease-in;
+        }
+
+        .voice-settings-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            padding: 10px 15px;
+            background: #f0f0f0;
+            border-radius: 4px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+        }
+
+        .voice-settings-header:hover {
+            background: #e8e8e8;
+        }
+
+        .voice-controls-group {
+            margin-top: 10px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+        }
+
+        .voice-control {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .voice-control label {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .voice-control input[type="range"] {
+            width: 100%;
+        }
+
+        .voice-control .value {
+            font-size: 0.8em;
+            text-align: right;
+            color: #666;
+        }
+
+        .voice-dropdown {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            width: 100%;
+            max-width: 300px;
+        }
+
+        .voice-info {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        /* Update button styles with new icons */
+        #startVoice.elementor-button {
+            background-color: #4CAF50;
+        }
+
+        #startVoice.elementor-button:before {
+            content: '🎙️';
+            margin-right: 5px;
+        }
+
+        #speakResponse.elementor-button {
+            background-color: #2196F3;
+        }
+
+        #stopSpeaking.elementor-button {
+            background-color: #f44336;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- WordPress friendly class names -->
+    <div class="webhook-container">
+        <textarea class="webhook-textarea" id="wpCustomText" rows="4"
+            placeholder="Enter your message here..."></textarea>
+        <button onclick="wpSendWebhook()" class="elementor-button">Send to n8n</button>
+        <div class="voice-controls">
+            <button id="startVoice" class="elementor-button">🎙️ Voice Input</button>
+            <button id="speakResponse" class="elementor-button">🔊 Speak</button>
+            <button id="stopSpeaking" class="elementor-button">⏹️ Stop</button>
+        </div>
+        <div class="voice-settings-header" onclick="toggleVoiceSettings()">
+            <span>🎛️ Voice Settings</span>
+            <span class="toggle-icon">▶</span>
+        </div>
+        <div class="voice-settings">
+            <select id="voiceSelect" class="voice-dropdown">
+                <option value="">Loading voices...</option>
+            </select>
+            <div id="voiceInfo" class="voice-info"></div>
+            <div class="voice-controls-group">
+                <div class="voice-control">
+                    <label for="voiceRate">Rate</label>
+                    <input type="range" id="voiceRate" min="0.5" max="2" step="0.1" value="1">
+                    <span class="value" id="voiceRateValue">1</span>
+                </div>
+                <div class="voice-control">
+                    <label for="voicePitch">Pitch</label>
+                    <input type="range" id="voicePitch" min="0.5" max="2" step="0.1" value="1">
+                    <span class="value" id="voicePitchValue">1</span>
+                </div>
+                <div class="voice-control">
+                    <label for="voiceVolume">Volume</label>
+                    <input type="range" id="voiceVolume" min="0" max="1" step="0.1" value="1">
+                    <span class="value" id="voiceVolumeValue">1</span>
+                </div>
+            </div>
+        </div>
+        <div id="wpWebhookStatus" class="webhook-status"></div>
+        <h3>Response from n8n:</h3>
+        <div id="wpWebhookResponse" class="webhook-response"></div>
+    </div>
+
+    <script>
+        // Add at start of script section
+        let recognition;
+        let synthesis;
+
+        function initSpeechRecognition() {
+            if ('webkitSpeechRecognition' in window) {
+                recognition = new webkitSpeechRecognition();
+                recognition.continuous = false;
+                recognition.interimResults = false;
+                recognition.lang = 'en-US';
+
+                recognition.onresult = function(event) {
+                    const text = event.results[0][0].transcript;
+                    document.getElementById('wpCustomText').value = text;
+                    document.getElementById('startVoice').classList.remove('recording');
+                };
+
+                recognition.onerror = function(event) {
+                    console.error('Speech recognition error:', event.error);
+                    document.getElementById('startVoice').classList.remove('recording');
+                };
+
+                recognition.onend = function() {
+                    document.getElementById('startVoice').classList.remove('recording');
+                };
+            }
+            
+            // Initialize speech synthesis
+            synthesis = window.speechSynthesis;
+            
+            // Load and display available voices
+            function loadVoices() {
+                const voices = synthesis.getVoices();
+                const voiceSelect = document.getElementById('voiceSelect');
+                const voiceInfo = document.getElementById('voiceInfo');
+                
+                if (voices.length > 0) {
+                    // Clear existing options
+                    voiceSelect.innerHTML = '';
+                    
+                    // Add voices to dropdown
+                    voices.forEach((voice, index) => {
+                        const option = document.createElement('option');
+                        option.value = index;
+                        option.textContent = `${voice.name} (${voice.lang})`;
+                        voiceSelect.appendChild(option);
+                        
+                        // Select a default voice (prefer natural sounding English voices)
+                        if (voice.name.includes('Samantha') || 
+                            voice.name.includes('Microsoft Zira') ||
+                            voice.name.includes('Google UK English Female')) {
+                            voiceSelect.value = index;
+                        }
+                    });
+                    
+                    // Show voice count
+                    voiceInfo.textContent = `${voices.length} voices available. For more voices, check your system settings or browser extensions.`;
+                } else {
+                    voiceInfo.textContent = 'No voices available. Try using Chrome or Edge for better voice support.';
+                }
+            }
+            
+            synthesis.onvoiceschanged = loadVoices;
+            loadVoices(); // Initial load attempt
+        }
+
+        // Add after initSpeechRecognition function
+        function saveVoiceSettings() {
+            const settings = {
+                voiceIndex: document.getElementById('voiceSelect').value,
+                rate: document.getElementById('voiceRate').value,
+                pitch: document.getElementById('voicePitch').value,
+                volume: document.getElementById('voiceVolume').value
+            };
+            localStorage.setItem('voiceSettings', JSON.stringify(settings));
+        }
+
+        function loadVoiceSettings() {
+            const settings = JSON.parse(localStorage.getItem('voiceSettings') || '{}');
+            
+            if (settings.rate) {
+                document.getElementById('voiceRate').value = settings.rate;
+                document.getElementById('voiceRateValue').textContent = settings.rate;
+            }
+            if (settings.pitch) {
+                document.getElementById('voicePitch').value = settings.pitch;
+                document.getElementById('voicePitchValue').textContent = settings.pitch;
+            }
+            if (settings.volume) {
+                document.getElementById('voiceVolume').value = settings.volume;
+                document.getElementById('voiceVolumeValue').textContent = settings.volume;
+            }
+            if (settings.voiceIndex) {
+                setTimeout(() => {
+                    document.getElementById('voiceSelect').value = settings.voiceIndex;
+                }, 100); // Small delay to ensure voices are loaded
+            }
+        }
+
+        // WordPress-specific implementation
+        function wpSendWebhook() {
+            var textInput = document.getElementById('wpCustomText');
+            var statusDiv = document.getElementById('wpWebhookStatus');
+            var responseDiv = document.getElementById('wpWebhookResponse');
+            var webhookUrl = 'https://myn8n.noveltynest.co.za/webhook/novelty';
+
+            // Show loading indicator
+            statusDiv.innerHTML = '<div class="webhook-loading"></div> Sending...';
+            responseDiv.innerHTML = '';
+
+            // Create request
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', webhookUrl, true);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+
+            // Handle response
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        statusDiv.innerHTML = 'Message sent successfully!';
+                        statusDiv.className = 'webhook-status success';
+                        // Store message before clearing
+                        const message = textInput.value;
+                        // Clear the input textarea after successful send
+                        textInput.value = '';
+                        if (xhr.responseText) {
+                            try {
+                                var data = JSON.parse(xhr.responseText);
+                                var formattedResponse = formatResponse(data);
+                                responseDiv.innerHTML = formattedResponse;
+                                saveToHistory(message, formattedResponse);
+                            } catch (e) {
+                                console.error('Error parsing response:', e);
+                                responseDiv.innerHTML = 'Error processing response';
+                                saveToHistory(message, 'Error processing response');
+                            }
+                        }
+                    } else {
+                        statusDiv.innerHTML = 'Error sending message';
+                        statusDiv.className = 'webhook-status error';
+                    }
+                }
+            };
+
+            // Send data
+            try {
+                var data = JSON.stringify({
+                    text: textInput.value
+                });
+                xhr.send(data);
+            } catch (e) {
+                statusDiv.innerHTML = 'Error: ' + e.message;
+            }
+        }
+
+        // Add this function to format the response
+        function formatResponse(data) {
+            try {
+                // Handle array response
+                if (Array.isArray(data)) {
+                    data = data[0];
+                }
+                
+                // Get the output text
+                let text = data.output || '';
+                
+                // Replace markdown formatting
+                text = text
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold text
+                    .replace(/\*(.*?)\*/g, '<em>$1</em>')             // Italic text
+                    .replace(/\n\n/g, '<br><br>')                     // Double line breaks
+                    .replace(/\n/g, '<br>')                           // Single line breaks
+                    // Convert markdown lists to HTML
+                    .replace(/^\* (.*)/gm, '<li>$1</li>');
+
+                // Wrap lists in ul tags
+                if (text.includes('<li>')) {
+                    text = '<ul>' + text + '</ul>';
+                }
+
+                return text;
+            } catch (e) {
+                console.error('Error formatting response:', e);
+                return 'Error formatting response';
+            }
+        }
+
+        // Initialize after DOM loads
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initWebhook);
+        } else {
+            initWebhook();
+        }
+
+        function initWebhook() {
+            // Ensure elements exist
+            if (!document.getElementById('wpCustomText')) {
+                console.error('Webhook elements not found');
+            }
+            addMessageHistory();
+            addCharacterCounter();
+            initSpeechRecognition();
+            
+            // Add voice control event listeners
+            document.getElementById('startVoice').addEventListener('click', function() {
+                if (recognition) {
+                    this.classList.add('recording');
+                    recognition.start();
+                } else {
+                    alert('Speech recognition not supported in this browser');
+                }
+            });
+            
+            document.getElementById('speakResponse').addEventListener('click', function() {
+                const responseDiv = document.getElementById('wpWebhookResponse');
+                const textToSpeak = responseDiv.textContent || responseDiv.innerText;
+                const voiceSelect = document.getElementById('voiceSelect');
+                
+                if (synthesis && textToSpeak) {
+                    const voices = synthesis.getVoices();
+                    const utterance = new SpeechSynthesisUtterance(textToSpeak);
+                    
+                    // Use selected voice if available
+                    if (voiceSelect.value !== '') {
+                        utterance.voice = voices[parseInt(voiceSelect.value)];
+                    }
+                    
+                    // Adjust speech parameters for more natural sound
+                    utterance.rate = parseFloat(document.getElementById('voiceRate').value);
+                    utterance.pitch = parseFloat(document.getElementById('voicePitch').value);
+                    utterance.volume = parseFloat(document.getElementById('voiceVolume').value);
+                    
+                    // Add event handlers for better user feedback
+                    utterance.onstart = () => {
+                        this.textContent = '🔊 Speaking...';
+                    };
+                    
+                    utterance.onend = () => {
+                        this.textContent = '🔊 Speak Response';
+                    };
+                    
+                    // Stop any ongoing speech
+                    synthesis.cancel();
+                    
+                    // Speak the text
+                    synthesis.speak(utterance);
+                } else {
+                    alert('Text-to-speech not supported or no response to speak');
+                }
+            });
+
+            document.getElementById('stopSpeaking').addEventListener('click', function() {
+                if (synthesis) {
+                    synthesis.cancel();
+                    document.getElementById('speakResponse').textContent = '🔊 Speak Response';
+                }
+            });
+
+            // Add event listeners for voice settings controls
+            document.getElementById('voiceRate').addEventListener('input', function() {
+                document.getElementById('voiceRateValue').textContent = this.value;
+                saveVoiceSettings();
+            });
+            document.getElementById('voicePitch').addEventListener('input', function() {
+                document.getElementById('voicePitchValue').textContent = this.value;
+                saveVoiceSettings();
+            });
+            document.getElementById('voiceVolume').addEventListener('input', function() {
+                document.getElementById('voiceVolumeValue').textContent = this.value;
+                saveVoiceSettings();
+            });
+            document.getElementById('voiceSelect').addEventListener('change', saveVoiceSettings);
+
+            loadVoiceSettings();
+        }
+
+        function toggleVoiceSettings() {
+            const settings = document.querySelector('.voice-settings');
+            settings.classList.toggle('expanded');
+        }
+
+        function addMessageHistory() {
+            var historyDiv = document.createElement('div');
+            historyDiv.className = 'webhook-history';
+            historyDiv.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h3>Message History</h3>
+                    <button onclick="clearHistory()" class="elementor-button">Clear History</button>
+                </div>
+                <div id="wpMessageHistory" class="webhook-response"></div>
+            `;
+            document.querySelector('.webhook-container').appendChild(historyDiv);
+            
+            // Load existing history
+            loadHistory();
+        }
+
+        function saveToHistory(message, response) {
+            var historyDiv = document.getElementById('wpMessageHistory');
+            var entry = document.createElement('div');
+            entry.className = 'history-entry';
+            
+            // Create timestamp
+            var timestamp = new Date().toLocaleString();
+            
+            entry.innerHTML = `
+                <div class="history-header" onclick="toggleHistory(this.parentElement)">
+                    <strong>${timestamp}</strong>
+                    <span class="toggle-icon">▶</span>
+                </div>
+                <div class="history-content">
+                    <p><strong>Message:</strong> ${message}</p>
+                    <p><strong>Response:</strong></p>
+                    <div class="webhook-response">${response}</div>
+                    <hr>
+                </div>
+            `;
+            
+            historyDiv.insertBefore(entry, historyDiv.firstChild);
+            
+            // Save to local storage
+            saveHistoryToStorage({
+                timestamp: timestamp,
+                message: message,
+                response: response
+            });
+        }
+
+        // Add toggle function
+        function toggleHistory(element) {
+            element.classList.toggle('expanded');
+        }
+
+        function saveHistoryToStorage(entry) {
+            var history = JSON.parse(localStorage.getItem('webhookHistory') || '[]');
+            history.unshift(entry);
+            // Keep only last 10 entries
+            history = history.slice(0, 10);
+            localStorage.setItem('webhookHistory', JSON.stringify(history));
+        }
+
+        function loadHistory() {
+            var history = JSON.parse(localStorage.getItem('webhookHistory') || '[]');
+            var historyDiv = document.getElementById('wpMessageHistory');
+            
+            history.forEach(function(entry) {
+                var div = document.createElement('div');
+                div.className = 'history-entry';
+                div.innerHTML = `
+                    <div class="history-header" onclick="toggleHistory(this.parentElement)">
+                        <strong>${entry.timestamp}</strong>
+                        <span class="toggle-icon">▶</span>
+                    </div>
+                    <div class="history-content">
+                        <p><strong>Message:</strong> ${entry.message}</p>
+                        <p><strong>Response:</strong></p>
+                        <div class="webhook-response">${entry.response}</div>
+                        <hr>
+                    </div>
+                `;
+                historyDiv.appendChild(div);
+            });
+        }
+
+        function clearHistory() {
+            if (confirm('Are you sure you want to clear the history?')) {
+                localStorage.removeItem('webhookHistory');
+                document.getElementById('wpMessageHistory').innerHTML = '';
+            }
+        }
+
+        function addCharacterCounter() {
+            var textarea = document.getElementById('wpCustomText');
+            var counter = document.createElement('div');
+            counter.id = 'wpCharCounter';
+            counter.className = 'webhook-counter';
+            textarea.parentNode.insertBefore(counter, textarea.nextSibling);
+
+            textarea.addEventListener('input', function() {
+                counter.textContent = `Characters: ${this.value.length}`;
+            });
+        }
+    </script>
+</body>
+
+</html>

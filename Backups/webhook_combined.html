@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Webhook Handler</title>
+    <style>
+        /* WordPress compatible styling */
+        .webhook-container {
+            padding: 20px;
+            max-width: 100%;
+        }
+
+        .webhook-status {
+            margin: 10px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-left: 4px solid #ccc;
+        }
+
+        .webhook-response {
+            font-family: monospace;
+            background: #f5f5f5;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            word-wrap: break-word;
+            line-height: 1.5;
+        }
+
+        .webhook-response ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+
+        .webhook-response li {
+            margin: 5px 0;
+        }
+
+        .webhook-response strong {
+            color: #2c3e50;
+        }
+
+        .webhook-response br {
+            line-height: 2;
+        }
+
+        .webhook-textarea {
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        /* Add to existing styles */
+        .webhook-loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .webhook-status.success {
+            background: #e7f3e8;
+            border-left-color: #2ecc71;
+        }
+
+        .webhook-status.error {
+            background: #fde7e7;
+            border-left-color: #e74c3c;
+        }
+
+        .webhook-counter {
+            color: #666;
+            font-size: 0.9em;
+            margin-top: 5px;
+            text-align: right;
+        }
+
+        .history-entry {
+            background: #fff;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            border: 1px solid #e0e0e0;
+            transition: all 0.3s ease;
+        }
+
+        .history-entry .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            padding: 10px;
+        }
+
+        .history-entry .history-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+
+        .history-entry.expanded .history-content {
+            max-height: 1000px;
+            transition: max-height 0.5s ease-in;
+        }
+
+        .history-entry .toggle-icon {
+            font-family: monospace;
+            transition: transform 0.3s ease;
+        }
+
+        .history-entry.expanded .toggle-icon {
+            transform: rotate(90deg);
+        }
+
+        .elementor-button {
+            background-color: #3498db;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .elementor-button:hover {
+            background-color: #2980b9;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- WordPress friendly class names -->
+    <div class="webhook-container">
+        <textarea class="webhook-textarea" id="wpCustomText" rows="4"
+            placeholder="Enter your message here..."></textarea>
+        <button onclick="wpSendWebhook()" class="elementor-button">Send to n8n</button>
+        <div id="wpWebhookStatus" class="webhook-status"></div>
+        <h3>Response from n8n:</h3>
+        <div id="wpWebhookResponse" class="webhook-response"></div>
+    </div>
+
+    <script>
+        // WordPress-specific implementation
+        function wpSendWebhook() {
+            var textInput = document.getElementById('wpCustomText');
+            var statusDiv = document.getElementById('wpWebhookStatus');
+            var responseDiv = document.getElementById('wpWebhookResponse');
+            var webhookUrl = 'https://myn8n.noveltynest.co.za/webhook/novelty';
+
+            // Show loading indicator
+            statusDiv.innerHTML = '<div class="webhook-loading"></div> Sending...';
+            responseDiv.innerHTML = '';
+
+            // Create request
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', webhookUrl, true);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+
+            // Handle response
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        statusDiv.innerHTML = 'Message sent successfully!';
+                        statusDiv.className = 'webhook-status success';
+                        if (xhr.responseText) {
+                            try {
+                                var data = JSON.parse(xhr.responseText);
+                                // Format the response
+                                var formattedResponse = formatResponse(data);
+                                // Display formatted response
+                                responseDiv.innerHTML = formattedResponse;
+                                // Save original response to history
+                                saveToHistory(textInput.value, formattedResponse);
+                            } catch (e) {
+                                console.error('Error parsing response:', e);
+                                responseDiv.innerHTML = 'Error processing response';
+                                saveToHistory(textInput.value, 'Error processing response');
+                            }
+                        }
+                    } else {
+                        statusDiv.innerHTML = 'Error sending message';
+                        statusDiv.className = 'webhook-status error';
+                    }
+                }
+            };
+
+            // Send data
+            try {
+                var data = JSON.stringify({
+                    text: textInput.value
+                });
+                xhr.send(data);
+            } catch (e) {
+                statusDiv.innerHTML = 'Error: ' + e.message;
+            }
+        }
+
+        // Add this function to format the response
+        function formatResponse(data) {
+            try {
+                // Handle array response
+                if (Array.isArray(data)) {
+                    data = data[0];
+                }
+                
+                // Get the output text
+                let text = data.output || '';
+                
+                // Replace markdown formatting
+                text = text
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold text
+                    .replace(/\*(.*?)\*/g, '<em>$1</em>')             // Italic text
+                    .replace(/\n\n/g, '<br><br>')                     // Double line breaks
+                    .replace(/\n/g, '<br>')                           // Single line breaks
+                    // Convert markdown lists to HTML
+                    .replace(/^\* (.*)/gm, '<li>$1</li>');
+
+                // Wrap lists in ul tags
+                if (text.includes('<li>')) {
+                    text = '<ul>' + text + '</ul>';
+                }
+
+                return text;
+            } catch (e) {
+                console.error('Error formatting response:', e);
+                return 'Error formatting response';
+            }
+        }
+
+        // Initialize after DOM loads
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initWebhook);
+        } else {
+            initWebhook();
+        }
+
+        function initWebhook() {
+            // Ensure elements exist
+            if (!document.getElementById('wpCustomText')) {
+                console.error('Webhook elements not found');
+            }
+            addMessageHistory();
+            addCharacterCounter();
+        }
+
+        function addMessageHistory() {
+            var historyDiv = document.createElement('div');
+            historyDiv.className = 'webhook-history';
+            historyDiv.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h3>Message History</h3>
+                    <button onclick="clearHistory()" class="elementor-button">Clear History</button>
+                </div>
+                <div id="wpMessageHistory" class="webhook-response"></div>
+            `;
+            document.querySelector('.webhook-container').appendChild(historyDiv);
+            
+            // Load existing history
+            loadHistory();
+        }
+
+        function saveToHistory(message, response) {
+            var historyDiv = document.getElementById('wpMessageHistory');
+            var entry = document.createElement('div');
+            entry.className = 'history-entry';
+            
+            // Create timestamp
+            var timestamp = new Date().toLocaleString();
+            
+            entry.innerHTML = `
+                <div class="history-header" onclick="toggleHistory(this.parentElement)">
+                    <strong>${timestamp}</strong>
+                    <span class="toggle-icon">▶</span>
+                </div>
+                <div class="history-content">
+                    <p><strong>Message:</strong> ${message}</p>
+                    <p><strong>Response:</strong></p>
+                    <div class="webhook-response">${response}</div>
+                    <hr>
+                </div>
+            `;
+            
+            historyDiv.insertBefore(entry, historyDiv.firstChild);
+            
+            // Save to local storage
+            saveHistoryToStorage({
+                timestamp: timestamp,
+                message: message,
+                response: response
+            });
+        }
+
+        // Add toggle function
+        function toggleHistory(element) {
+            element.classList.toggle('expanded');
+        }
+
+        function saveHistoryToStorage(entry) {
+            var history = JSON.parse(localStorage.getItem('webhookHistory') || '[]');
+            history.unshift(entry);
+            // Keep only last 10 entries
+            history = history.slice(0, 10);
+            localStorage.setItem('webhookHistory', JSON.stringify(history));
+        }
+
+        function loadHistory() {
+            var history = JSON.parse(localStorage.getItem('webhookHistory') || '[]');
+            var historyDiv = document.getElementById('wpMessageHistory');
+            
+            history.forEach(function(entry) {
+                var div = document.createElement('div');
+                div.className = 'history-entry';
+                div.innerHTML = `
+                    <div class="history-header" onclick="toggleHistory(this.parentElement)">
+                        <strong>${entry.timestamp}</strong>
+                        <span class="toggle-icon">▶</span>
+                    </div>
+                    <div class="history-content">
+                        <p><strong>Message:</strong> ${entry.message}</p>
+                        <p><strong>Response:</strong></p>
+                        <div class="webhook-response">${entry.response}</div>
+                        <hr>
+                    </div>
+                `;
+                historyDiv.appendChild(div);
+            });
+        }
+
+        function clearHistory() {
+            if (confirm('Are you sure you want to clear the history?')) {
+                localStorage.removeItem('webhookHistory');
+                document.getElementById('wpMessageHistory').innerHTML = '';
+            }
+        }
+
+        function addCharacterCounter() {
+            var textarea = document.getElementById('wpCustomText');
+            var counter = document.createElement('div');
+            counter.id = 'wpCharCounter';
+            counter.className = 'webhook-counter';
+            textarea.parentNode.insertBefore(counter, textarea.nextSibling);
+
+            textarea.addEventListener('input', function() {
+                counter.textContent = `Characters: ${this.value.length}`;
+            });
+        }
+    </script>
+</body>
+
+</html>
